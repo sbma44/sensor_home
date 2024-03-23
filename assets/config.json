@@ -1,0 +1,57 @@
+{
+    "host": "192.168.1.2",
+    "client_id": "flutter_client",
+    "subscribe": ["xiaomi_mijia/#"],
+    "environment_entries": [
+        {
+            "id": "M_BEDRM",
+            "label": "Master Bedroom",
+            "temperature_topic": "xiaomi_mijia/M_BEDRM/temperature",
+            "humidity_topic": "xiaomi_mijia/M_BEDRM/humidity"
+        },
+        {
+            "id": "M_BSMNT",
+            "label": "Basement Living Room",
+            "temperature_topic": "xiaomi_mijia/M_BSMNT/temperature",
+            "humidity_topic": "xiaomi_mijia/M_BSMNT/humidity"
+        },
+        {
+            "id": "M_GARAGE",
+            "label": "Garage Stairwell",
+            "temperature_topic": "xiaomi_mijia/M_GARAGE/temperature",
+            "humidity_topic": "xiaomi_mijia/M_GARAGE/humidity"
+        },
+        {
+            "id": "M_GUEST",
+            "label": "Basement Guest",
+            "temperature_topic": "xiaomi_mijia/M_GUEST/temperature",
+            "humidity_topic": "xiaomi_mijia/M_GUEST/humidity"
+        },
+        {
+            "id": "M_LVNGRM",
+            "label": "Living Room",
+            "temperature_topic": "xiaomi_mijia/M_LVNGRM/temperature",
+            "humidity_topic": "xiaomi_mijia/M_LVNGRM/humidity"
+        },
+        {
+            "id": "M_OFFICE",
+            "label": "Win's Room",
+            "temperature_topic": "xiaomi_mijia/M_OFFICE/temperature",
+            "humidity_topic": "xiaomi_mijia/M_OFFICE/humidity"
+        },
+        {
+            "id": "M_BKROOM",
+            "label": "Garage Office",
+            "temperature_topic": "xiaomi_mijia/M_BKROOM/temperature",
+            "humidity_topic": "xiaomi_mijia/M_BKROOM/humidity"
+        }
+    ],
+    "button": ["A/C Power Toggle", "http://192.168.45.4:80/msg?code=10AF8877:NEC:32&address=0xf508&pass=XHV2HFCTyi&simple=1"],
+    "delta": {
+        "topic1": "xiaomi_mijia/M_GARAGE/temperature",
+        "topic2": "xiaomi_mijia/M_BKROOM/temperature",
+        "chunk": 3600,
+        "url": "http://192.168.1.2:8003/time-series?topic={topic1}&topic={topic2}&chunk={chunk}&since={since}",
+        "label": "Garage/Office Δ\n"
+    }
+}
