@@ -1,12 +1,14 @@
 import 'dart:ffi';
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mqtt_client/mqtt_client.dart' as mqtt;
 import 'package:mqtt_client/mqtt_server_client.dart' as mqtt;
+import 'package:uuid/uuid.dart';
 
 import 'environment_list.dart';
 import 'settings_page.dart';
@@ -42,11 +44,12 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
 
-  late mqtt.MqttServerClient client;
+  mqtt.MqttServerClient? client;
   bool irblasterQueryInFlight = false;
   String currentDeltaDegrees = '--';
   List<TemperatureItem> items = [];
   late dynamic rootConfig;
+  late String userid;
 
   Timer? _timer; // Timer reference
 
@@ -65,27 +68,82 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
   }
 
+
   void doAsyncLoading() async {
-    // load config from JSON file
-    final configJson = await rootBundle.loadString("assets/config.json");
-    rootConfig = await json.decode(configJson);
 
-    rootConfig['environment_entries'].forEach((entry) {
-      items.add(
-        TemperatureItem(
-          id: entry['id'],
-          label: entry['label'],
-          temperature_topic: entry['temperature_topic'],
-          humidity_topic: entry['humidity_topic']
-        )
-      );
-    });
+    void processRetrievedConfig() {
+      // load config from JSON file
+      rootConfig['environment_entries'].forEach((entry) {
+        // find item with matching id and update its field values or, if none exists, add a new one
+        var found = false;
+        for(var i = 0; i < items.length; i++) {
+          if (items[i].id == entry['id']) {
+            items[i].label = entry['label'];
+            items[i].temperature_topic = entry['temperature_topic'];
+            items[i].humidity_topic = entry['humidity_topic'];
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          items.add(
+            TemperatureItem(
+              id: entry['id'],
+              label: entry['label'],
+              temperature_topic: entry['temperature_topic'],
+              humidity_topic: entry['humidity_topic']
+            )
+          );
+        }
+      });
 
-    setState(() {
-      items = items;
-    });
+      setState(() {
+        items = items;
+      });
 
-    _connectToMqtt();
+      _connectToMqtt();
+    }
+
+    Future<bool> fetchConfigFromServer() async {
+      final configJson = await rootBundle.loadString("assets/config.json");
+      var conf = await json.decode(configJson);
+
+      final prefs = await SharedPreferences.getInstance();
+      var url = Uri.parse('${conf["config"]}?u=${userid}');
+      var response = await http.get(url);
+      if (response.statusCode == 200) {
+        await prefs.setString('configJson', response.body);
+        rootConfig = await json.decode(response.body);
+        processRetrievedConfig();
+        return true;
+      }
+      else {
+        return false;
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    userid = prefs.getString('userid') ?? '';
+    if (userid == '') {
+      const uuid = Uuid();
+      userid = uuid.v4();
+      await prefs.setString('userid', userid);
+    }
+
+    // load config from prefs, if available. if not, fetch from server
+    var configJsonString = prefs.getString('configJson') ?? '';
+    if (configJsonString == '') {
+      var success = await fetchConfigFromServer();
+      if (!success) {
+        // indicate error condition somehow
+      }
+    }
+    else {
+      rootConfig = await json.decode(configJsonString);
+      processRetrievedConfig();
+
+      fetchConfigFromServer(); // refresh config, but don't wait for it
+    }
   }
 
   void fetchDelta() async {
@@ -168,24 +226,31 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   }
 
   void _connectToMqtt() async {
+    // reconnect if invoked and the server has changed. otherwise return silently
+    if (client?.connectionStatus!.state == mqtt.MqttConnectionState.connected) {
+      if (client?.server == rootConfig['host'].toString() && client?.clientIdentifier == rootConfig['client_id'].toString()) {
+        return;
+      }
+      client!.disconnect();
+    }
     client = mqtt.MqttServerClient(rootConfig['host'].toString(), rootConfig['client_id'].toString());
-    client.onConnected = _onConnected;
-    client.onSubscribed = _onSubscribed;
-    client.onDisconnected = _onDisconnected;
-    client.onUnsubscribed = _onUnsubscribed;
+    client!.onConnected = _onConnected;
+    client!.onSubscribed = _onSubscribed;
+    client!.onDisconnected = _onDisconnected;
+    client!.onUnsubscribed = _onUnsubscribed;
 
     try {
-      await client.connect();
+      await client!.connect();
     } catch (e) {
       print('Exception: $e');
-      client.disconnect();
+      client!.disconnect();
     }
   }
 
   void _onConnected() {
     print('Connected to MQTT');
     for (var entry in rootConfig['subscribe']) {
-      client.subscribe(entry.toString(), mqtt.MqttQos.atMostOnce);
+      client!.subscribe(entry.toString(), mqtt.MqttQos.atMostOnce);
     }
   }
 
@@ -196,7 +261,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   void _onSubscribed(String topic) {
     print('Subscribed to topic: $topic');
 
-    client.updates!.listen((List<mqtt.MqttReceivedMessage<mqtt.MqttMessage>> messageList) {
+    client!.updates!.listen((List<mqtt.MqttReceivedMessage<mqtt.MqttMessage>> messageList) {
       for(var entry in messageList) {
         final String topic = entry.topic;
         final recMsg = entry.payload as mqtt.MqttPublishMessage;
