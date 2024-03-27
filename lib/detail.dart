@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert'; // For JSON parsing
 import 'package:fl_chart/fl_chart.dart';
 
+import 'environment_list.dart';
+
 class AppColors {
   static const Color primary = contentColorCyan;
   static const Color menuBackground = Color(0xFF090912);
@@ -45,12 +47,15 @@ class MyTimeSeriesChart extends StatelessWidget {
       fontWeight: FontWeight.bold,
       fontSize: 16,
     );
-    DateTime dateTime = DateTime.fromMillisecondsSinceEpoch((value * 1000).toInt());
-    return (dateTime.minute != 0) ? Container() : SideTitleWidget(
-      axisSide: meta.axisSide,
-      space: 10,
-      child: Text(DateFormat('h:mma').format(dateTime).toLowerCase(), style: style)
-    );
+    DateTime dateTime =
+        DateTime.fromMillisecondsSinceEpoch((value * 1000).toInt());
+    return (dateTime.minute != 0)
+        ? Container()
+        : SideTitleWidget(
+            axisSide: meta.axisSide,
+            space: 10,
+            child: Text(DateFormat('h:mma').format(dateTime).toLowerCase(),
+                style: style));
   }
 
   List<Color> gradientColors = [
@@ -60,73 +65,77 @@ class MyTimeSeriesChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return dataPoints.length <= 1 ? Container() : LineChart(
-      LineChartData(
-        minX: dataPoints[0].x,
-        maxX: dataPoints[dataPoints.length - 1].x,
-        minY: 0,
-        maxY: 100,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: true,
-          horizontalInterval: 360,
-          verticalInterval: 10,
-          getDrawingHorizontalLine: (value) {
-            return const FlLine(
-              color: AppColors.mainGridLineColor,
-              strokeWidth: 1,
-            );
-          },
-          getDrawingVerticalLine: (value) {
-            return const FlLine(
-              color: AppColors.mainGridLineColor,
-              strokeWidth: 1,
-            );
-          },
-        ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: dataPoints,
-            isCurved: true,
-            gradient: LinearGradient(
-              colors: gradientColors,
-            ),
-            barWidth: 5,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                colors: gradientColors
-                    .map((color) => color.withOpacity(0.3))
-                    .toList(),
+    return dataPoints.length <= 1
+        ? Container()
+        : LineChart(
+            LineChartData(
+              minX: dataPoints[0].x,
+              maxX: dataPoints[dataPoints.length - 1].x,
+              minY: 0,
+              maxY: 100,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: true,
+                horizontalInterval: 360,
+                verticalInterval: 10,
+                getDrawingHorizontalLine: (value) {
+                  return const FlLine(
+                    color: AppColors.mainGridLineColor,
+                    strokeWidth: 1,
+                  );
+                },
+                getDrawingVerticalLine: (value) {
+                  return const FlLine(
+                    color: AppColors.mainGridLineColor,
+                    strokeWidth: 1,
+                  );
+                },
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: dataPoints,
+                  isCurved: true,
+                  gradient: LinearGradient(
+                    colors: gradientColors,
+                  ),
+                  barWidth: 5,
+                  isStrokeCapRound: true,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      colors: gradientColors
+                          .map((color) => color.withOpacity(0.3))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              ],
+              titlesData: FlTitlesData(
+                show: true,
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    interval: 60 * 60 * 6,
+                    getTitlesWidget: bottomTitleWidgets,
+                  ),
+                ),
+                rightTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               ),
             ),
-          ),
-        ],
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              interval: 60 * 60 * 6,
-              getTitlesWidget: bottomTitleWidgets,
-            ),
-          ),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-      ),
-    );
+          );
   }
 }
 
 class DetailScreen extends StatefulWidget {
-  final String topic;
-  final String label;
+  final dynamic config;
+  final List<TemperatureItem> items;
 
-  const DetailScreen({super.key, required this.topic, required this.label});
+  const DetailScreen({super.key, required this.config, required this.items});
 
   @override
   _DetailScreenState createState() => _DetailScreenState();
@@ -137,34 +146,46 @@ class _DetailScreenState extends State<DetailScreen> {
   bool isLoading = true;
   bool isError = false;
 
+  late String topic;
+  late String label;
+
   @override
   void initState() {
     super.initState();
+
+    topic = widget.items[0].temperature_topic;
+    label = widget.items[0].label;
+
     fetchData();
   }
 
   void fetchData() async {
     try {
-      final since = (DateTime.now().millisecondsSinceEpoch / 1000) - (24 * 60 * 60);
-      var url = Uri.parse('http://192.168.1.2:8003/time-series?topic=${widget.topic}&chunk=300&since=$since');
+      final since =
+          (DateTime.now().millisecondsSinceEpoch / 1000) - (24 * 60 * 60);
+      var url = Uri.parse(
+          'http://192.168.1.2:8003/time-series?topic=${topic}&chunk=300&since=$since');
       var response = await http.get(url);
 
       if (response.statusCode == 200) {
-
         // If the server returns a 200 OK response, parse the JSON
         Map<String, dynamic> jsonResponse = json.decode(response.body);
 
-        if (jsonResponse.containsKey(widget.topic) && jsonResponse[widget.topic] is List) {
+        if (jsonResponse.containsKey(topic) && jsonResponse[topic] is List) {
           // Cast jsonResponse[topic] to List and then map to List<FlSpot>
-          List<FlSpot> loadedDataPoints = List.from(jsonResponse[widget.topic]).map((data) {
+          List<FlSpot> loadedDataPoints =
+              List.from(jsonResponse[topic]).map((data) {
             // Ensure 'data' has at least two elements
             if (data is List && data.length >= 2) {
-              return FlSpot(data[0].toDouble(), double.parse(((data[1].toDouble() * 9 / 5.0) + 32.0).toStringAsFixed(1)));
-            }
-            else {
+              return FlSpot(
+                  data[0].toDouble(),
+                  double.parse(((data[1].toDouble() * 9 / 5.0) + 32.0)
+                      .toStringAsFixed(1)));
+            } else {
               print(data);
             }
-            return FlSpot(0, 0); // Return a default value or handle this case as needed
+            return FlSpot(
+                0, 0); // Return a default value or handle this case as needed
           }).toList();
 
           setState(() {
@@ -172,7 +193,6 @@ class _DetailScreenState extends State<DetailScreen> {
             isLoading = false;
           });
         }
-
       } else {
         // If the server did not return a 200 OK response,
         // throw an exception.
@@ -193,22 +213,25 @@ class _DetailScreenState extends State<DetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.label),
-      ),
-      body: Column(children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 48),
-            child: isError ? const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 60,
-              ) :
-            isLoading ? Center(child: const CircularProgressIndicator()) : MyTimeSeriesChart(dataPoints: dataPoints)
-          )
+        appBar: AppBar(
+          title: Text(label),
         ),
-      ],)
-    );
+        body: Column(
+          children: [
+            Expanded(
+                child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 48),
+                    child: isError
+                        ? const Icon(
+                            Icons.error_outline,
+                            color: Colors.red,
+                            size: 60,
+                          )
+                        : isLoading
+                            ? Center(child: const CircularProgressIndicator())
+                            : MyTimeSeriesChart(dataPoints: dataPoints))),
+          ],
+        ));
   }
 }

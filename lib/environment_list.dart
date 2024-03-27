@@ -9,6 +9,7 @@ class TemperatureItem {
   String temperature;
   String humidity;
   bool hasBeenUpdated;
+  bool isSelected = false;
 
   TemperatureItem({required this.id, required this.label, required this.temperature_topic, required this.humidity_topic, this.temperature = '', this.humidity = '', this.hasBeenUpdated = false});
 
@@ -40,10 +41,11 @@ class TemperatureItem {
 
 class EnvironmentListView extends StatelessWidget {
   final List<TemperatureItem> items;
+  final Function onTapCallback;
 
-  const EnvironmentListView({Key? key, required this.items}) : super(key: key);
+  const EnvironmentListView({Key? key, required this.items, required this.onTapCallback}) : super(key: key);
 
-  TextStyle rowTextStyle(bool hasBeenUpdated) {
+  TextStyle rowTextStyle(bool hasBeenUpdated, bool isSelected) {
     return hasBeenUpdated ? TextStyle() : TextStyle(
       color: Colors.grey[400]
     );
@@ -60,26 +62,22 @@ class EnvironmentListView extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
                   // Label on the left
-                  Text(items[index].label, style: rowTextStyle(items[index].hasBeenUpdated)),
+                  Text(items[index].label, style: rowTextStyle(items[index].hasBeenUpdated, items[index].isSelected)),
 
                   // Temperature and Humidity on the right
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: <Widget>[
-                      Text(items[index].temperature, style: rowTextStyle(items[index].hasBeenUpdated)),
-                      Text(items[index].humidity, style: rowTextStyle(items[index].hasBeenUpdated)),
+                      Text(items[index].temperature, style: rowTextStyle(items[index].hasBeenUpdated, items[index].isSelected)),
+                      Text(items[index].humidity, style: rowTextStyle(items[index].hasBeenUpdated, items[index].isSelected)),
                     ],
                   ),
                 ],
               ),
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => DetailScreen(topic: items[index].temperature_topic, label: items[index].label),
-                  ),
-                );
-              }
+                onTapCallback(index);
+              },
+              tileColor: items[index].isSelected ? Theme.of(context).colorScheme.inversePrimary : Colors.white,
             ),
           );
         },
