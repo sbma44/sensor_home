@@ -115,6 +115,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       if (response.statusCode == 200) {
         await prefs.setString('configJson', response.body);
         rootConfig = await json.decode(response.body);
+        rootConfig['api'] = conf['api'];
         processRetrievedConfig();
         return true;
       } else {

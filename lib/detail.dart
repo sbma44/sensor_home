@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -32,9 +33,9 @@ class AppColors {
 }
 
 class MyTimeSeriesChart extends StatelessWidget {
-  final List<FlSpot> dataPoints;
+  final List<List<FlSpot>> dataSeries;
 
-  MyTimeSeriesChart({required this.dataPoints});
+  MyTimeSeriesChart({required this.dataSeries});
 
   String formatUnixTimestamp(int timestamp) {
     DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
@@ -63,14 +64,24 @@ class MyTimeSeriesChart extends StatelessWidget {
     AppColors.contentColorBlue,
   ];
 
+  double foldFold(Function comp, List data) {
+    var out = data[0][0].x;
+    for (var i = 0; i < data.length; i++) {
+      for (var j = 0; j < data[i].length; j++) {
+        out = comp(out, data[i][j].x);
+      }
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return dataPoints.length <= 1
-        ? Container()
+    return dataSeries.length < 1
+        ? Container(child: Text('empty'))
         : LineChart(
             LineChartData(
-              minX: dataPoints[0].x,
-              maxX: dataPoints[dataPoints.length - 1].x,
+              minX: foldFold(min, dataSeries),
+              maxX: foldFold(max, dataSeries),
               minY: 0,
               maxY: 100,
               gridData: FlGridData(
@@ -91,26 +102,30 @@ class MyTimeSeriesChart extends StatelessWidget {
                   );
                 },
               ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: dataPoints,
-                  isCurved: true,
-                  gradient: LinearGradient(
-                    colors: gradientColors,
-                  ),
-                  barWidth: 5,
-                  isStrokeCapRound: true,
-                  dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(
-                    show: true,
+              lineBarsData: () {
+                List<LineChartBarData> lines = [];
+                for (int i = 0; i < dataSeries.length; i++) {
+                  lines.add(LineChartBarData(
+                    spots: dataSeries[i],
+                    isCurved: true,
                     gradient: LinearGradient(
-                      colors: gradientColors
-                          .map((color) => color.withOpacity(0.3))
-                          .toList(),
+                      colors: gradientColors,
                     ),
-                  ),
-                ),
-              ],
+                    barWidth: 5,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        colors: gradientColors
+                            .map((color) => color.withOpacity(0.3))
+                            .toList(),
+                      ),
+                    ),
+                  ));
+                }
+                return lines;
+              }(),
               titlesData: FlTitlesData(
                 show: true,
                 bottomTitles: AxisTitles(
@@ -142,19 +157,15 @@ class DetailScreen extends StatefulWidget {
 }
 
 class _DetailScreenState extends State<DetailScreen> {
-  late List<FlSpot> dataPoints = []; // This will hold the data for the chart
+  late List<List<FlSpot>> dataSeries = [
+    []
+  ]; // This will hold the data for the chart
   bool isLoading = true;
   bool isError = false;
-
-  late String topic;
-  late String label;
 
   @override
   void initState() {
     super.initState();
-
-    topic = widget.items[0].temperature_topic;
-    label = widget.items[0].label;
 
     fetchData();
   }
@@ -163,36 +174,42 @@ class _DetailScreenState extends State<DetailScreen> {
     try {
       final since =
           (DateTime.now().millisecondsSinceEpoch / 1000) - (24 * 60 * 60);
+      var topics = widget.items
+          .map((item) => 'topic=${item.temperature_topic}')
+          .toList()
+          .join('&');
       var url = Uri.parse(
-          'http://192.168.1.2:8003/time-series?topic=${topic}&chunk=300&since=$since');
+          '${widget.config["api"]}time-series?${topics}&chunk=600&since=$since');
+      print(url);
       var response = await http.get(url);
 
       if (response.statusCode == 200) {
         // If the server returns a 200 OK response, parse the JSON
         Map<String, dynamic> jsonResponse = json.decode(response.body);
 
-        if (jsonResponse.containsKey(topic) && jsonResponse[topic] is List) {
-          // Cast jsonResponse[topic] to List and then map to List<FlSpot>
-          List<FlSpot> loadedDataPoints =
-              List.from(jsonResponse[topic]).map((data) {
-            // Ensure 'data' has at least two elements
-            if (data is List && data.length >= 2) {
+        List<List<FlSpot>> loadedDataPoints = [];
+        jsonResponse.forEach((topic, value) {
+          if (value is List) {
+            loadedDataPoints.add(value.map((data) {
+              // Ensure 'data' has at least two elements
+              if (data is List && data.length >= 2) {
+                return FlSpot(
+                    data[0].toDouble(),
+                    double.parse(((data[1].toDouble() * 9 / 5.0) + 32.0)
+                        .toStringAsFixed(1)));
+              } else {
+                print(data);
+              }
               return FlSpot(
-                  data[0].toDouble(),
-                  double.parse(((data[1].toDouble() * 9 / 5.0) + 32.0)
-                      .toStringAsFixed(1)));
-            } else {
-              print(data);
-            }
-            return FlSpot(
-                0, 0); // Return a default value or handle this case as needed
-          }).toList();
+                  0, 0); // Return a default value or handle this case as needed
+            }).toList());
+          }
+        });
 
-          setState(() {
-            dataPoints = loadedDataPoints;
-            isLoading = false;
-          });
-        }
+        setState(() {
+          dataSeries = loadedDataPoints;
+          isLoading = false;
+        });
       } else {
         // If the server did not return a 200 OK response,
         // throw an exception.
@@ -214,7 +231,7 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text(label),
+          title: Text('label'),
         ),
         body: Column(
           children: [
@@ -230,7 +247,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           )
                         : isLoading
                             ? Center(child: const CircularProgressIndicator())
-                            : MyTimeSeriesChart(dataPoints: dataPoints))),
+                            : MyTimeSeriesChart(dataSeries: dataSeries))),
           ],
         ));
   }

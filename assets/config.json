@@ -1,3 +1,4 @@
 {
-    "config": "http://192.168.1.2:8003/flutter/config.json"
+    "config": "http://192.168.1.2:8003/flutter/config.json",
+    "api": "http://192.168.1.2:8003/"
 }
