@@ -32,10 +32,34 @@ class AppColors {
   static const Color contentColorCyan = Color(0xFF50E4FF);
 }
 
+Color getColorFromIndex(int index) {
+  List<Color> colors = [
+    AppColors.contentColorBlue,
+    AppColors.contentColorYellow,
+    AppColors.contentColorOrange,
+    AppColors.contentColorPurple,
+    AppColors.contentColorPink,
+    AppColors.contentColorRed,
+    AppColors.contentColorCyan,
+    AppColors.contentColorGreen,
+  ];
+  return colors[index % colors.length];
+}
+
+class LabelWithIndexColor extends Text {
+  LabelWithIndexColor(String data, int index, {embiggen = false})
+      : super(data,
+            style: TextStyle(
+                color: getColorFromIndex(index),
+                fontSize: embiggen ? 18 : null));
+}
+
 class MyTimeSeriesChart extends StatelessWidget {
   final List<List<FlSpot>> dataSeries;
+  final bool isTemperatureChart;
 
-  MyTimeSeriesChart({required this.dataSeries});
+  MyTimeSeriesChart(
+      {required this.dataSeries, required this.isTemperatureChart});
 
   String formatUnixTimestamp(int timestamp) {
     DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
@@ -59,90 +83,102 @@ class MyTimeSeriesChart extends StatelessWidget {
                 style: style));
   }
 
+  List<Color> getGradientFromIndex(int index) {
+    Color c = getColorFromIndex(index);
+    return [c.withOpacity(0.3), c.withOpacity(0.1)];
+  }
+
   List<Color> gradientColors = [
     AppColors.contentColorCyan,
     AppColors.contentColorBlue,
   ];
 
-  double foldFold(Function comp, List data) {
-    var out = data[0][0].x;
+  double foldFold(Function comp, Function accessor, List data,
+      {double roundTo = 1.0}) {
+    var out = accessor(data[0][0]);
     for (var i = 0; i < data.length; i++) {
       for (var j = 0; j < data[i].length; j++) {
-        out = comp(out, data[i][j].x);
+        out = comp(out, accessor(data[i][j]));
       }
     }
-    return out;
+    return (out / roundTo).round() * roundTo;
   }
 
   @override
   Widget build(BuildContext context) {
     return dataSeries.length < 1
         ? Container(child: Text('empty'))
-        : LineChart(
-            LineChartData(
-              minX: foldFold(min, dataSeries),
-              maxX: foldFold(max, dataSeries),
-              minY: 0,
-              maxY: 100,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: true,
-                horizontalInterval: 360,
-                verticalInterval: 10,
-                getDrawingHorizontalLine: (value) {
-                  return const FlLine(
-                    color: AppColors.mainGridLineColor,
-                    strokeWidth: 1,
-                  );
-                },
-                getDrawingVerticalLine: (value) {
-                  return const FlLine(
-                    color: AppColors.mainGridLineColor,
-                    strokeWidth: 1,
-                  );
-                },
-              ),
-              lineBarsData: () {
-                List<LineChartBarData> lines = [];
-                for (int i = 0; i < dataSeries.length; i++) {
-                  lines.add(LineChartBarData(
-                    spots: dataSeries[i],
-                    isCurved: true,
-                    gradient: LinearGradient(
-                      colors: gradientColors,
-                    ),
-                    barWidth: 5,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        colors: gradientColors
-                            .map((color) => color.withOpacity(0.3))
-                            .toList(),
-                      ),
-                    ),
-                  ));
-                }
-                return lines;
-              }(),
-              titlesData: FlTitlesData(
-                show: true,
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    interval: 60 * 60 * 6,
-                    getTitlesWidget: bottomTitleWidgets,
-                  ),
-                ),
-                rightTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              ),
+        : LineChart(LineChartData(
+            minX: foldFold(min, (q) => q.x, dataSeries, roundTo: 5.0),
+            maxX: foldFold(max, (q) => q.x, dataSeries, roundTo: 5.0),
+            minY: foldFold(min, (q) => q.y, dataSeries, roundTo: 5.0) - 10,
+            maxY: foldFold(max, (q) => q.y, dataSeries, roundTo: 5.0) + 10,
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: true,
+              horizontalInterval: 360,
+              verticalInterval: 10,
+              getDrawingHorizontalLine: (value) {
+                return const FlLine(
+                  color: AppColors.mainGridLineColor,
+                  strokeWidth: 1,
+                );
+              },
+              getDrawingVerticalLine: (value) {
+                return const FlLine(
+                  color: AppColors.mainGridLineColor,
+                  strokeWidth: 1,
+                );
+              },
             ),
-          );
+            lineBarsData: () {
+              List<LineChartBarData> lines = [];
+              for (int i = 0; i < dataSeries.length; i++) {
+                lines.add(LineChartBarData(
+                  spots: dataSeries[i],
+                  isCurved: true,
+                  color: getColorFromIndex(i),
+                  barWidth: 5,
+                  isStrokeCapRound: true,
+                  dotData: FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      colors: getGradientFromIndex(i),
+                    ),
+                  ),
+                ));
+              }
+              return lines;
+            }(),
+            titlesData: FlTitlesData(
+              show: true,
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 60,
+                  interval: 60 * 60 * 6,
+                  getTitlesWidget: bottomTitleWidgets,
+                ),
+              ),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            lineTouchData: LineTouchData(touchTooltipData: LineTouchTooltipData(
+              getTooltipItems: (value) {
+                return value
+                    .map((e) => LineTooltipItem(
+                        isTemperatureChart
+                            ? "${formatUnixTimestamp(e.x.round())}\n${e.y}°F"
+                            : "${formatUnixTimestamp(e.x.round())}\n${e.y}%",
+                        const TextStyle(color: Colors.white, fontSize: 14)))
+                    .toList();
+              },
+              // tooltipBgColor: AppColour.mainBlue,
+            )),
+          ));
   }
 }
 
@@ -157,9 +193,8 @@ class DetailScreen extends StatefulWidget {
 }
 
 class _DetailScreenState extends State<DetailScreen> {
-  late List<List<FlSpot>> dataSeries = [
-    []
-  ]; // This will hold the data for the chart
+  late List<List<FlSpot>> temperatureDataSeries = [[]];
+  late List<List<FlSpot>> humidityDataSeries = [[]];
   bool isLoading = true;
   bool isError = false;
 
@@ -175,7 +210,8 @@ class _DetailScreenState extends State<DetailScreen> {
       final since =
           (DateTime.now().millisecondsSinceEpoch / 1000) - (24 * 60 * 60);
       var topics = widget.items
-          .map((item) => 'topic=${item.temperature_topic}')
+          .map((item) =>
+              'topic=${item.temperature_topic}&topic=${item.humidity_topic}')
           .toList()
           .join('&');
       var url = Uri.parse(
@@ -187,27 +223,43 @@ class _DetailScreenState extends State<DetailScreen> {
         // If the server returns a 200 OK response, parse the JSON
         Map<String, dynamic> jsonResponse = json.decode(response.body);
 
-        List<List<FlSpot>> loadedDataPoints = [];
+        List<List<FlSpot>> temperatureDataPoints = [];
+        List<List<FlSpot>> humidityDataPoints = [];
         jsonResponse.forEach((topic, value) {
           if (value is List) {
-            loadedDataPoints.add(value.map((data) {
-              // Ensure 'data' has at least two elements
-              if (data is List && data.length >= 2) {
-                return FlSpot(
-                    data[0].toDouble(),
-                    double.parse(((data[1].toDouble() * 9 / 5.0) + 32.0)
-                        .toStringAsFixed(1)));
-              } else {
-                print(data);
-              }
-              return FlSpot(
-                  0, 0); // Return a default value or handle this case as needed
-            }).toList());
+            if (topic.contains('temperature')) {
+              temperatureDataPoints.add(value.map((data) {
+                // Ensure 'data' has at least two elements
+                if (data is List && data.length >= 2) {
+                  return FlSpot(
+                      data[0].toDouble(),
+                      double.parse(((data[1].toDouble() * 9 / 5.0) + 32.0)
+                          .toStringAsFixed(1)));
+                } else {
+                  print(data);
+                }
+                return FlSpot(0,
+                    0); // Return a default value or handle this case as needed
+              }).toList());
+            } else if (topic.contains('humidity')) {
+              humidityDataPoints.add(value.map((data) {
+                // Ensure 'data' has at least two elements
+                if (data is List && data.length >= 2) {
+                  return FlSpot(data[0].toDouble(),
+                      double.parse(data[1].toDouble().toStringAsFixed(1)));
+                } else {
+                  print(data);
+                }
+                return FlSpot(0,
+                    0); // Return a default value or handle this case as needed
+              }).toList());
+            }
           }
         });
 
         setState(() {
-          dataSeries = loadedDataPoints;
+          temperatureDataSeries = temperatureDataPoints;
+          humidityDataSeries = humidityDataPoints;
           isLoading = false;
         });
       } else {
@@ -231,24 +283,64 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text('label'),
+          title: widget.items.length <= 2
+              ? Column(
+                  children: widget.items.asMap().entries.map((entry) {
+                  return LabelWithIndexColor(entry.value.label, entry.key);
+                }).toList())
+              : Container(),
         ),
-        body: Column(
-          children: [
-            Expanded(
-                child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 48),
-                    child: isError
-                        ? const Icon(
-                            Icons.error_outline,
-                            color: Colors.red,
-                            size: 60,
-                          )
-                        : isLoading
-                            ? Center(child: const CircularProgressIndicator())
-                            : MyTimeSeriesChart(dataSeries: dataSeries))),
-          ],
-        ));
+        body: Column(children: [
+          widget.items.length <= 2
+              ? Container()
+              : Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8.0,
+                  runSpacing: 4.0,
+                  children: widget.items.asMap().entries.map((entry) {
+                    return LabelWithIndexColor(entry.value.label, entry.key,
+                        embiggen: true);
+                  }).toList()),
+          Expanded(
+              child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  child: isError
+                      ? const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 60,
+                        )
+                      : isLoading
+                          ? const Center(
+                              child: const CircularProgressIndicator())
+                          : MyTimeSeriesChart(
+                              dataSeries: temperatureDataSeries,
+                              isTemperatureChart: true,
+                            ))),
+          Transform.translate(
+              offset: Offset(0, -40), child: const Text('Temperature')),
+          Expanded(
+              child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  child: isError
+                      ? const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 60,
+                        )
+                      : isLoading
+                          ? const Center(
+                              child: const CircularProgressIndicator())
+                          : MyTimeSeriesChart(
+                              dataSeries: humidityDataSeries,
+                              isTemperatureChart: false,
+                            ))),
+          Transform.translate(
+            offset: Offset(0, -40),
+            child: const Text('Humidity'),
+          )
+        ]));
   }
 }

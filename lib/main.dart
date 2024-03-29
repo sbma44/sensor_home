@@ -46,6 +46,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   bool irblasterQueryInFlight = false;
   String currentDeltaDegrees = '--';
   String title = '';
+  String toggleButtonText = 'Toggle';
   List<TemperatureItem> items = [];
   late dynamic rootConfig;
   late String userid;
@@ -56,12 +57,6 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-
-    const period = Duration(seconds: 30); // Adjust the period as needed
-    _timer = Timer.periodic(period, (timer) {
-      fetchDelta();
-    });
-    fetchDelta();
 
     doAsyncLoading();
 
@@ -102,7 +97,19 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         });
       }
 
+      if (rootConfig['button'] != null) {
+        setState(() {
+          toggleButtonText = rootConfig['button'][0].toString();
+        });
+      }
+
       _connectToMqtt();
+
+      const period = Duration(seconds: 30); // Adjust the period as needed
+      _timer = Timer.periodic(period, (timer) {
+        fetchDelta();
+      });
+      fetchDelta();
     }
 
     Future<bool> fetchConfigFromServer() async {
@@ -115,7 +122,6 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       if (response.statusCode == 200) {
         await prefs.setString('configJson', response.body);
         rootConfig = await json.decode(response.body);
-        rootConfig['api'] = conf['api'];
         processRetrievedConfig();
         return true;
       } else {
@@ -147,31 +153,32 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   }
 
   void fetchDelta() async {
-    // try {
     final since =
         (DateTime.now().millisecondsSinceEpoch / 1000) - (1 * 60 * 60);
-    var url = Uri.parse(
-        'http://192.168.1.2:8003/time-series?topic=xiaomi_mijia/M_GARAGE/temperature&topic=xiaomi_mijia/M_BKROOM/temperature&chunk=3600&since=$since');
+    final topic1 = rootConfig['delta']['topic1'].toString();
+    final topic2 = rootConfig['delta']['topic2'].toString();
+    final chunk = rootConfig['delta']['chunk'].toString();
+    var url = Uri.parse(rootConfig['delta']['url']
+        .toString()
+        .replaceAll('{topic1}', topic1)
+        .replaceAll('{topic2}', topic2)
+        .replaceAll('{chunk}', chunk)
+        .replaceAll('{since}', since.toString()));
     var response = await http.get(url);
 
     if (response.statusCode == 200) {
       // If the server returns a 200 OK response, parse the JSON
       Map<String, dynamic> jsonResponse = json.decode(response.body);
 
-      if (jsonResponse.containsKey('xiaomi_mijia/M_GARAGE/temperature') &&
-          jsonResponse.containsKey('xiaomi_mijia/M_BKROOM/temperature') &&
-          jsonResponse['xiaomi_mijia/M_GARAGE/temperature'] is List &&
-          jsonResponse['xiaomi_mijia/M_BKROOM/temperature'] is List) {
+      if (jsonResponse.containsKey(topic1) &&
+          jsonResponse.containsKey(topic2) &&
+          jsonResponse[topic1] is List &&
+          jsonResponse[topic2] is List) {
         // Cast jsonResponse[topic] to List and then map to List<FlSpot>
-        final garageTempList =
-            List.from(jsonResponse['xiaomi_mijia/M_GARAGE/temperature']);
-        final officeTempList =
-            List.from(jsonResponse['xiaomi_mijia/M_BKROOM/temperature']);
+        final garageTempList = List.from(jsonResponse[topic1]);
+        final officeTempList = List.from(jsonResponse[topic2]);
 
-        if (!(garageTempList is List) ||
-            !(officeTempList is List) ||
-            garageTempList.length < 1 ||
-            officeTempList.length < 1) {
+        if (garageTempList.isEmpty || officeTempList.isEmpty) {
           setState(() {
             currentDeltaDegrees = 'error';
           });
@@ -194,12 +201,6 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       });
       throw Exception('Failed to load data');
     }
-    // } catch (e) {
-    //   // Handle any exceptions here
-    //   setState(() {
-    //     currentDeltaDegrees = 'error ${e.toString()}';
-    //   });
-    // }
   }
 
   @override
@@ -217,14 +218,14 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   void _connectToMqtt() async {
     // reconnect if invoked and the server has changed. otherwise return silently
     if (client?.connectionStatus!.state == mqtt.MqttConnectionState.connected) {
-      if (client?.server == rootConfig['host'].toString() &&
+      if (client?.server == rootConfig['mqtt_host'].toString() &&
           client?.clientIdentifier == rootConfig['client_id'].toString()) {
         return;
       }
       client!.disconnect();
     }
     client = mqtt.MqttServerClient(
-        rootConfig['host'].toString(), rootConfig['client_id'].toString());
+        rootConfig['mqtt_host'].toString(), rootConfig['client_id'].toString());
     client!.onConnected = _onConnected;
     client!.onSubscribed = _onSubscribed;
     client!.onDisconnected = _onDisconnected;
@@ -289,8 +290,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       irblasterQueryInFlight = true; // Show loading indicator
     });
 
-    var url = Uri.parse(
-        'http://192.168.45.4:80/msg?code=10AF8877:NEC:32&address=0xf508&pass=XHV2HFCTyi&simple=1');
+    var url = Uri.parse(rootConfig['button'][1].toString());
     var response = await http.get(url);
 
     setState(() {
@@ -403,7 +403,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                           ? CircularProgressIndicator()
                           : ElevatedButton(
                               onPressed: toggleLoading,
-                              child: Text('A/C Power Toggle'),
+                              child: Text(toggleButtonText),
                             ),
                     ),
                   )
